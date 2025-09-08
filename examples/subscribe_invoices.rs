@@ -20,13 +20,13 @@ async fn main() {
     let address = address.into_string().expect("address is not UTF-8");
 
     // Connecting to LND requires only address, cert file, and macaroon file
-    let mut client = fedimint_tonic_lnd::connect(address, cert_file, macaroon_file)
+    let mut client = lndk_tonic_lnd::connect(address, cert_file, macaroon_file)
         .await
         .expect("failed to connect");
 
     let mut invoice_stream = client
         .lightning()
-        .subscribe_invoices(fedimint_tonic_lnd::lnrpc::InvoiceSubscription {
+        .subscribe_invoices(lndk_tonic_lnd::lnrpc::InvoiceSubscription {
             add_index: 0,
             settle_index: 0,
         })
@@ -39,14 +39,14 @@ async fn main() {
         .await
         .expect("Failed to receive invoices")
     {
-        let state: fedimint_tonic_lnd::lnrpc::invoice::InvoiceState = invoice
+        let state: lndk_tonic_lnd::lnrpc::invoice::InvoiceState = invoice
             .state
             .try_into()
             .expect("Failed to parse invoice state");
 
         // If this invoice was Settled we can do something with it
-        if state == fedimint_tonic_lnd::lnrpc::invoice::InvoiceState::Settled {
-            println!("{:?}", invoice);
+        if state == lndk_tonic_lnd::lnrpc::invoice::InvoiceState::Settled {
+            println!("{invoice:?}");
         }
     }
 }
