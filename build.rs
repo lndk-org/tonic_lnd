@@ -3,11 +3,7 @@ use std::path::PathBuf;
 fn main() -> std::io::Result<()> {
     println!("cargo:rerun-if-env-changed=LND_REPO_DIR");
     let dir = match std::env::var_os("LND_REPO_DIR") {
-        Some(lnd_repo_path) => {
-            let mut lnd_rpc_dir = PathBuf::from(lnd_repo_path);
-            lnd_rpc_dir.push("lnrpc");
-            lnd_rpc_dir
-        }
+        Some(lnd_repo_path) => PathBuf::from(lnd_repo_path).join("lnrpc"),
         None => PathBuf::from("vendor"),
     };
 
@@ -24,17 +20,11 @@ fn main() -> std::io::Result<()> {
         "invoicesrpc/invoices.proto",
     ];
 
-    let proto_paths: Vec<_> = protos
-        .iter()
-        .map(|proto| {
-            let proto_path = dir.join(proto);
-            proto_path
-        })
-        .collect();
+    let proto_paths: Vec<_> = protos.iter().map(|proto| dir.join(proto)).collect();
 
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_client(true)
         .build_server(false)
-        .compile(&proto_paths, &[dir])?;
+        .compile_protos(&proto_paths, &[dir])?;
     Ok(())
 }
