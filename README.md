@@ -1,7 +1,7 @@
 # Tonic LND client
 
-[![Crate](https://img.shields.io/crates/v/fedimint-tonic-lnd.svg?logo=rust)](https://crates.io/crates/fedimint-tonic-lnd)
-[![Documentation](https://img.shields.io/static/v1?logo=read-the-docs&label=docs.rs&message=fedimint-tonic-lnd&color=informational)](https://docs.rs/fedimint-tonic-lnd/)
+[![Crate](https://img.shields.io/crates/v/lndk-tonic-lnd.svg?logo=rust)](https://crates.io/crates/lndk-tonic-lnd)
+[![Documentation](https://img.shields.io/static/v1?logo=read-the-docs&label=docs.rs&message=lndk-tonic-lnd&color=informational)](https://docs.rs/lndk-tonic-lnd/)
 
 Rust implementation of LND RPC client using async gRPC library `tonic`.
 
@@ -10,11 +10,11 @@ Rust implementation of LND RPC client using async gRPC library `tonic`.
 **Warning: this crate is in early development and may have unknown problems!
 Review it before using with mainnet funds!**
 
-This crate supports *[Lightning](https://lightning.engineering/api-docs/category/lightning-service)*, *[WalletKit](https://lightning.engineering/api-docs/category/walletkit-service)*, *[Signer](https://lightning.engineering/api-docs/category/signer-service)*, and *[Peer](https://lightning.engineering/api-docs/category/peers-service)* RPC APIs from LND [v0.15.4-beta](https://github.com/lightningnetwork/lnd/tree/v0.15.4-beta)
+This crate supports _[Lightning](https://lightning.engineering/api-docs/category/lightning-service)_, _[WalletKit](https://lightning.engineering/api-docs/category/walletkit-service)_, _[Signer](https://lightning.engineering/api-docs/category/signer-service)_, and _[Peer](https://lightning.engineering/api-docs/category/peers-service)_ RPC APIs from LND [v0.15.4-beta](https://github.com/lightningnetwork/lnd/tree/v0.15.4-beta)
 
 This crate implements LND GRPC using [`tonic`](https://docs.rs/tonic/) and [`prost`](https://docs.rs/prost/).
 Apart from being up-to-date at the time of writing (:D) it also allows `async` usage.
-It contains vendored `*.proto` files so LND source code is not *required*
+It contains vendored `*.proto` files so LND source code is not _required_
 but accepts an environment variable `LND_REPO_DIR` which overrides the vendored `*.proto` files.
 This can be used to test new features in non-released `lnd`.
 (Actually, the motivating project using this library was that case. :))
@@ -47,14 +47,14 @@ async fn main() {
     let address = address.into_string().expect("address is not UTF-8");
 
     // Connecting to LND requires only address, cert file, and macaroon file
-    let mut client = fedimint_tonic_lnd::connect(address, cert_file, macaroon_file)
+    let mut client = lndk_tonic_lnd::connect(address, cert_file, macaroon_file)
         .await
         .expect("failed to connect");
 
     let info = client
         .lightning()
         // All calls require at least empty parameter
-        .get_info(fedimint_tonic_lnd::lnrpc::GetInfoRequest {})
+        .get_info(lndk_tonic_lnd::lnrpc::GetInfoRequest {})
         .await
         .expect("failed to get info");
 

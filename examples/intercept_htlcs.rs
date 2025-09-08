@@ -29,13 +29,12 @@ async fn main() {
         .expect("macaroon_file is not UTF-8");
 
     // Connecting to LND requires only address, cert file, and macaroon file
-    let mut client = fedimint_tonic_lnd::connect(address, cert_file, macaroon_file)
+    let mut client = lndk_tonic_lnd::connect(address, cert_file, macaroon_file)
         .await
         .expect("failed to connect");
 
-    let (tx, rx) = tokio::sync::mpsc::channel::<
-        fedimint_tonic_lnd::routerrpc::ForwardHtlcInterceptResponse,
-    >(1024);
+    let (tx, rx) =
+        tokio::sync::mpsc::channel::<lndk_tonic_lnd::routerrpc::ForwardHtlcInterceptResponse>(1024);
     let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
 
     let mut htlc_stream = client
@@ -56,7 +55,7 @@ async fn main() {
             htlc.incoming_circuit_key, htlc.incoming_amount_msat, htlc.outgoing_amount_msat, htlc.payment_hash
         );
 
-        let response = fedimint_tonic_lnd::routerrpc::ForwardHtlcInterceptResponse {
+        let response = lndk_tonic_lnd::routerrpc::ForwardHtlcInterceptResponse {
             incoming_circuit_key: htlc.incoming_circuit_key,
             action: 2, // Resume fordwarding of intercepted HTLC
             preimage: vec![],

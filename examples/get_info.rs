@@ -21,18 +21,18 @@ async fn main() {
     let address = address.into_string().expect("address is not UTF-8");
 
     // Connecting to LND requires only address, cert file, and macaroon file
-    let mut client = fedimint_tonic_lnd::connect(address, cert_file, macaroon_file)
+    let mut client = lndk_tonic_lnd::connect(address, cert_file, macaroon_file)
         .await
         .expect("failed to connect");
 
     let info = client
         .lightning()
         // All calls require at least empty parameter
-        .get_info(fedimint_tonic_lnd::lnrpc::GetInfoRequest {})
+        .get_info(lndk_tonic_lnd::lnrpc::GetInfoRequest {})
         .await
         .expect("failed to get info");
 
     // We only print it here, note that in real-life code you may want to call `.into_inner()` on
     // the response to get the message.
-    println!("{:#?}", info);
+    println!("{info:#?}");
 }
