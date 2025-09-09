@@ -43,7 +43,7 @@ impl fmt::Display for ConnectError {
                 Some(file) => write!(f, "failed to parse certificate {}", file.display()),
                 None => write!(f, "failed to parse certificate"),
             },
-            InvalidAddress { address, .. } => write!(f, "invalid address {}", address),
+            InvalidAddress { address, .. } => write!(f, "invalid address {address}"),
         }
     }
 }
