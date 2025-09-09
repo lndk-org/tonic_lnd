@@ -1,7 +1,6 @@
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::protos::*;
 use crate::tls;
-use crate::Error;
 use hyper::Uri;
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::connect::HttpConnector;
@@ -43,7 +42,140 @@ pub type RouterClient = routerrpc::router_client::RouterClient<Service>;
 /// Convenience type alias for invoices client.
 #[cfg(feature = "invoicesrpc")]
 pub type InvoicesClient = invoicesrpc::invoices_client::InvoicesClient<Service>;
+/// A builder for configuring and constructing a [`Client`] to connect to LND via gRPC.
+///
+/// This builder allows you to specify connection details, authentication credentials (macaroon),
+/// and TLS certificates either from file paths or from in-memory contents. Use the various
+/// methods to set the desired options, then call [`build`] to create a [`Client`].
+///
+/// # Example
+/// ```rust
+/// let client = ClientBuilder::new()
+///     .address("https://localhost:10009")
+///     .macaroon_path("~/.lnd/admin.macaroon")
+///     .cert_path("~/.lnd/tls.cert")
+///     .build()
+///     .await?;
+/// ```
+///
+/// You can also use in-memory credentials:
+/// ```rust
+/// let client = ClientBuilder::new()
+///     .address("https://localhost:10009")
+///     .macaroon_contents(hex_macaroon_string)
+///     .cert_contents(pem_cert_string)
+///     .build()
+///     .await?;
+/// ```
+#[derive(Debug, Clone)]
+pub struct ClientBuilder {
+    address: Option<String>,
+    macaroon_path: Option<PathBuf>,
+    macaroon_contents: Option<String>,
+    cert_path: Option<PathBuf>,
+    cert_contents: Option<String>,
+}
 
+impl Default for ClientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ClientBuilder {
+    /// Creates a new [`ClientBuilder`] with no fields set.
+    pub fn new() -> Self {
+        Self {
+            address: None,
+            macaroon_path: None,
+            macaroon_contents: None,
+            cert_path: None,
+            cert_contents: None,
+        }
+    }
+
+    /// Sets the address (URL) of the LND node to connect to.
+    ///
+    /// The address must begin with "https://".
+    ///
+    /// # Arguments
+    /// * `address` - The gRPC endpoint of the LND node (e.g., "https://localhost:10009").
+    pub fn address(mut self, address: impl ToString) -> Self {
+        self.address = Some(address.to_string());
+        self
+    }
+
+    /// Sets the path to the macaroon file for authentication.
+    ///
+    /// # Arguments
+    /// * `path` - Filesystem path to the macaroon file (e.g., "~/.lnd/admin.macaroon").
+    ///
+    /// This is mutually exclusive with [`macaroon_contents`].
+    pub fn macaroon_path(mut self, path: impl AsRef<Path> + Into<PathBuf>) -> Self {
+        self.macaroon_path = Some(path.into());
+        self
+    }
+
+    /// Sets the contents of the macaroon for authentication, as a hex-encoded string.
+    ///
+    /// # Arguments
+    /// * `contents` - The macaroon as a hex-encoded string.
+    ///
+    /// This is mutually exclusive with [`macaroon_path`].
+    pub fn macaroon_contents(mut self, contents: impl ToString) -> Self {
+        self.macaroon_contents = Some(contents.to_string());
+        self
+    }
+
+    /// Sets the path to the TLS certificate file for the LND node.
+    ///
+    /// # Arguments
+    /// * `path` - Filesystem path to the PEM-encoded certificate file (e.g., "~/.lnd/tls.cert").
+    ///
+    /// This is mutually exclusive with [`cert_contents`].
+    pub fn cert_path(mut self, path: impl AsRef<Path> + Into<PathBuf>) -> Self {
+        self.cert_path = Some(path.into());
+        self
+    }
+
+    /// Sets the contents of the TLS certificate for the LND node, as a PEM-encoded string.
+    ///
+    /// # Arguments
+    /// * `contents` - The PEM-encoded certificate string.
+    ///
+    /// This is mutually exclusive with [`cert_path`].
+    pub fn cert_contents(mut self, contents: impl ToString) -> Self {
+        self.cert_contents = Some(contents.to_string());
+        self
+    }
+
+    /// Finalizes the builder and attempts to connect to the LND node, returning a [`Client`].
+    ///
+    /// # Errors
+    /// Returns an error if any required field is missing (such as address or macaroon),
+    /// or if the connection or credential loading fails.
+    pub async fn build(self) -> Result<Client> {
+        let address = self.address.ok_or(Error::MissingAddress)?;
+
+        let macaroon = if let Some(path) = self.macaroon_path {
+            load_macaroon(path).await?
+        } else if let Some(contents) = self.macaroon_contents {
+            contents
+        } else {
+            return Err(Error::MissingMacaroon);
+        };
+
+        let tls_config = if let Some(path) = self.cert_path {
+            tls::config(tls::Cert::Path(path)).await?
+        } else if let Some(contents) = self.cert_contents {
+            tls::config(tls::Cert::<String>::Bytes(contents.into_bytes())).await?
+        } else {
+            return Err(Error::MissingTlsCert);
+        };
+
+        do_connect(address, tls_config, macaroon).await
+    }
+}
 /// The client returned by `connect` function
 ///
 /// This is a convenience type which you most likely want to use instead of raw client.
@@ -66,6 +198,11 @@ pub struct Client {
 }
 
 impl Client {
+    /// Returns a builder for a client.
+    pub fn builder() -> ClientBuilder {
+        ClientBuilder::new()
+    }
+
     /// Returns the lightning client.
     #[cfg(feature = "lightningrpc")]
     pub fn lightning(&mut self) -> &mut LightningClient {
@@ -161,7 +298,7 @@ impl tonic::service::Interceptor for MacaroonInterceptor {
     fn call(
         &mut self,
         mut request: tonic::Request<()>,
-    ) -> std::result::Result<tonic::Request<()>, Error> {
+    ) -> std::result::Result<tonic::Request<()>, tonic::Status> {
         request.metadata_mut().insert(
             "macaroon",
             tonic::metadata::MetadataValue::from_str(&self.macaroon)
@@ -192,9 +329,12 @@ where
     CP: AsRef<Path> + Into<PathBuf> + std::fmt::Debug,
     MP: AsRef<Path> + Into<PathBuf> + std::fmt::Debug,
 {
-    let macaroon = load_macaroon(macaroon_file).await?;
-    let tls_config = tls::config(tls::Cert::Path(cert_file)).await?;
-    do_connect(address, tls_config, macaroon).await
+    Client::builder()
+        .address(address)
+        .cert_path(cert_file)
+        .macaroon_path(macaroon_file)
+        .build()
+        .await
 }
 
 /// connect_from_memory connects to LND using in-memory cert and macaroon instead of from file paths.
@@ -206,8 +346,12 @@ pub async fn connect_from_memory(
     cert_pem: String,
     macaroon: String,
 ) -> Result<Client> {
-    let tls_config = tls::config(tls::Cert::<String>::Bytes(cert_pem.into_bytes())).await?;
-    do_connect(address, tls_config, macaroon).await
+    Client::builder()
+        .address(address)
+        .cert_contents(cert_pem)
+        .macaroon_contents(macaroon)
+        .build()
+        .await
 }
 
 async fn do_connect(address: String, tls_config: ClientConfig, macaroon: String) -> Result<Client> {
