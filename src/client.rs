@@ -1,17 +1,19 @@
-use crate::error::{Error, Result};
-use crate::protos::*;
-use crate::tls;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
 use hyper::Uri;
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client as HyperClient;
 use hyper_util::rt::TokioExecutor;
 use rustls::client::ClientConfig;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use tonic::body::Body as TonicBody;
 use tonic::codegen::InterceptedService;
 use zeroize::Zeroizing;
+
+use crate::error::{Error, Result};
+use crate::protos::*;
+use crate::tls;
 
 type Service =
     InterceptedService<HyperClient<HttpsConnector<HttpConnector>, TonicBody>, MacaroonInterceptor>;

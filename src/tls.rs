@@ -1,16 +1,12 @@
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::ClientConfig;
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::{DigitallySignedStruct, Error as TLSError, RootCertStore, SignatureScheme};
+
 use crate::error::Result;
-use rustls::{
-    client::{
-        danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-        ClientConfig,
-    },
-    pki_types::{CertificateDer, ServerName, UnixTime},
-    DigitallySignedStruct, Error as TLSError, RootCertStore, SignatureScheme,
-};
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
 
 pub(crate) async fn config<P: AsRef<Path> + Into<PathBuf>>(cert: Cert<P>) -> Result<ClientConfig> {
     let hybrid_verifier = HybridCertVerifier::load(cert).await?;
