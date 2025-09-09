@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tonic::body::Body as TonicBody;
 use tonic::codegen::InterceptedService;
+use zeroize::Zeroizing;
 
 type Service =
     InterceptedService<HyperClient<HttpsConnector<HttpConnector>, TonicBody>, MacaroonInterceptor>;
@@ -71,7 +72,7 @@ pub type InvoicesClient = invoicesrpc::invoices_client::InvoicesClient<Service>;
 pub struct ClientBuilder {
     address: Option<String>,
     macaroon_path: Option<PathBuf>,
-    macaroon_contents: Option<String>,
+    macaroon_contents: Option<Zeroizing<String>>,
     cert_path: Option<PathBuf>,
     cert_contents: Option<String>,
 }
@@ -123,7 +124,7 @@ impl ClientBuilder {
     ///
     /// This is mutually exclusive with [`macaroon_path`].
     pub fn macaroon_contents(mut self, contents: impl ToString) -> Self {
-        self.macaroon_contents = Some(contents.to_string());
+        self.macaroon_contents = Some(Zeroizing::new(contents.to_string()));
         self
     }
 
@@ -159,10 +160,8 @@ impl ClientBuilder {
 
         let macaroon = if let Some(path) = self.macaroon_path {
             load_macaroon(path).await?
-        } else if let Some(contents) = self.macaroon_contents {
-            contents
         } else {
-            return Err(Error::MissingMacaroon);
+            self.macaroon_contents.ok_or(Error::MissingMacaroon)?
         };
 
         let tls_config = if let Some(path) = self.cert_path {
@@ -291,7 +290,7 @@ impl Client {
 /// Supplies requests with macaroon
 #[derive(Clone)]
 pub struct MacaroonInterceptor {
-    macaroon: String,
+    macaroon: Zeroizing<String>,
 }
 
 impl tonic::service::Interceptor for MacaroonInterceptor {
@@ -308,9 +307,11 @@ impl tonic::service::Interceptor for MacaroonInterceptor {
     }
 }
 
-async fn load_macaroon(path: impl AsRef<Path> + Into<PathBuf>) -> std::io::Result<String> {
+async fn load_macaroon(
+    path: impl AsRef<Path> + Into<PathBuf>,
+) -> std::io::Result<Zeroizing<String>> {
     let macaroon = tokio::fs::read(&path).await?;
-    Ok(hex::encode(macaroon))
+    Ok(Zeroizing::new(hex::encode(macaroon)))
 }
 
 /// Connects to LND using given address and credentials
@@ -354,7 +355,11 @@ pub async fn connect_from_memory(
         .await
 }
 
-async fn do_connect(address: String, tls_config: ClientConfig, macaroon: String) -> Result<Client> {
+async fn do_connect(
+    address: String,
+    tls_config: ClientConfig,
+    macaroon: Zeroizing<String>,
+) -> Result<Client> {
     let connector = hyper_rustls::HttpsConnectorBuilder::new()
         .with_tls_config(tls_config)
         .https_or_http()
