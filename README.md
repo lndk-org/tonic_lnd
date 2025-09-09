@@ -51,6 +51,14 @@ async fn main() {
         .await
         .expect("failed to connect");
 
+    // Or using the builder
+    let client = lndk_tonic_lnd::ClientBuilder::new()
+        .address(address)
+        .macaroon_path(macaroon_file)
+        .cert_path(cert_file)
+        .build()
+        .await?;
+
     let info = client
         .lightning()
         // All calls require at least empty parameter
