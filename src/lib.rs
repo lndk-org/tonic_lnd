@@ -5,9 +5,8 @@ pub extern crate tonic;
 
 mod client;
 mod error;
+mod protos;
 mod tls;
 pub use client::*;
-pub use error::ConnectError;
-
-/// [`tonic::Status`] is re-exported as `Error` for convenience.
-pub type Error = tonic::Status;
+pub use error::*;
+pub use protos::*;

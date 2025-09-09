@@ -1,29 +1,14 @@
-use crate::error::{ConnectError, InternalConnectError};
-use rustls::{
-    client::{
-        danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-        ClientConfig,
-    },
-    pki_types::{CertificateDer, ServerName, UnixTime},
-    DigitallySignedStruct, Error as TLSError, RootCertStore, SignatureScheme,
-};
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-macro_rules! try_map_err {
-    ($result:expr, $mapfn:expr) => {
-        match $result {
-            Ok(value) => value,
-            Err(error) => return Err($mapfn(error).into()),
-        }
-    };
-}
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::ClientConfig;
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::{DigitallySignedStruct, Error as TLSError, RootCertStore, SignatureScheme};
 
-pub(crate) async fn config<P: AsRef<Path> + Into<PathBuf>>(
-    cert: Cert<P>,
-) -> Result<ClientConfig, ConnectError> {
+use crate::error::Result;
+
+pub(crate) async fn config<P: AsRef<Path> + Into<PathBuf>>(cert: Cert<P>) -> Result<ClientConfig> {
     let hybrid_verifier = HybridCertVerifier::load(cert).await?;
 
     Ok(ClientConfig::builder()
@@ -39,49 +24,23 @@ pub(crate) struct HybridCertVerifier {
 }
 
 impl HybridCertVerifier {
-    pub(crate) async fn load<P: AsRef<Path> + Into<PathBuf>>(
-        cert: Cert<P>,
-    ) -> Result<Self, InternalConnectError> {
+    pub(crate) async fn load<P: AsRef<Path> + Into<PathBuf>>(cert: Cert<P>) -> Result<Self> {
         let contents = match cert {
-            Cert::Path(path) => {
-                try_map_err!(tokio::fs::read(&path).await, |error| {
-                    InternalConnectError::ReadFile {
-                        file: path.into(),
-                        error,
-                    }
-                })
-            }
+            Cert::Path(path) => tokio::fs::read(&path).await?,
             Cert::Bytes(bytes) => bytes,
         };
 
         let mut reader = &*contents;
-        let cert_data: Vec<CertificateDer> = try_map_err!(
-            rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>(),
-            |error| InternalConnectError::ParseCert { file: None, error }
-        );
+        let cert_data: Vec<CertificateDer> =
+            rustls_pemfile::certs(&mut reader).collect::<std::result::Result<Vec<_>, _>>()?;
 
         let mut root_store = RootCertStore::empty();
         for cert_bytes in &cert_data {
-            if let Err(_err) = root_store.add(cert_bytes.clone()) {
-                return Err(InternalConnectError::ParseCert {
-                    file: None,
-                    error: std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "Failed to add certificate to root store",
-                    ),
-                });
-            }
+            root_store.add(cert_bytes.clone())?
         }
 
-        let standard_verifier = rustls::client::WebPkiServerVerifier::builder(Arc::new(root_store))
-            .build()
-            .map_err(|_| InternalConnectError::ParseCert {
-                file: None,
-                error: std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Failed build verifier using root store",
-                ),
-            })?;
+        let standard_verifier =
+            rustls::client::WebPkiServerVerifier::builder(Arc::new(root_store)).build()?;
 
         Ok(HybridCertVerifier {
             exact_certs: cert_data,
@@ -119,7 +78,7 @@ impl ServerCertVerifier for HybridCertVerifier {
         server_name: &ServerName,
         ocsp_response: &[u8],
         now: UnixTime,
-    ) -> Result<ServerCertVerified, TLSError> {
+    ) -> std::result::Result<ServerCertVerified, TLSError> {
         if self.try_exact_match(end_entity, intermediates) {
             return Ok(ServerCertVerified::assertion());
         }
@@ -138,9 +97,8 @@ impl ServerCertVerifier for HybridCertVerifier {
         message: &[u8],
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
-        self.standard_verifier
-            .verify_tls12_signature(message, cert, dss)
+    ) -> std::result::Result<HandshakeSignatureValid, TLSError> {
+        self.standard_verifier.verify_tls12_signature(message, cert, dss)
     }
 
     fn verify_tls13_signature(
@@ -148,9 +106,8 @@ impl ServerCertVerifier for HybridCertVerifier {
         message: &[u8],
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TLSError> {
-        self.standard_verifier
-            .verify_tls13_signature(message, cert, dss)
+    ) -> std::result::Result<HandshakeSignatureValid, TLSError> {
+        self.standard_verifier.verify_tls13_signature(message, cert, dss)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
