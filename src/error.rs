@@ -1,81 +1,15 @@
-use std::fmt;
-use std::path::PathBuf;
+pub type Result<T> = std::result::Result<T, Error>;
 
-/// Error that could happen during connecting to LND
-///
-/// This error may be returned by the `connect()` function if connecting failed.
-/// It is currently opaque because it's unclear how the variants will look long-term.
-/// Thus you probably only want to display it.
-#[derive(Debug)]
-pub struct ConnectError {
-    internal: InternalConnectError,
-}
-
-impl From<InternalConnectError> for ConnectError {
-    fn from(value: InternalConnectError) -> Self {
-        ConnectError {
-            internal: value,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) enum InternalConnectError {
-    ReadFile {
-        file: PathBuf,
-        error: std::io::Error,
-    },
-    ParseCert {
-        file: Option<PathBuf>,
-        error: std::io::Error,
-    },
-    InvalidAddress {
-        address: String,
-        error: Box<dyn std::error::Error + Send + Sync + 'static>,
-    },
-}
-
-impl fmt::Display for ConnectError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use InternalConnectError::*;
-
-        match &self.internal {
-            ReadFile {
-                file,
-                ..
-            } => write!(f, "failed to read file {}", file.display()),
-            ParseCert {
-                file,
-                ..
-            } => match file {
-                Some(file) => write!(f, "failed to parse certificate {}", file.display()),
-                None => write!(f, "failed to parse certificate"),
-            },
-            InvalidAddress {
-                address,
-                ..
-            } => write!(f, "invalid address {address}"),
-        }
-    }
-}
-
-impl std::error::Error for ConnectError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use InternalConnectError::*;
-
-        match &self.internal {
-            ReadFile {
-                error,
-                ..
-            } => Some(error),
-            ParseCert {
-                error,
-                ..
-            } => Some(error),
-            InvalidAddress {
-                error,
-                ..
-            } => Some(&**error),
-        }
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Filesystem error: {0}")]
+    Filesystem(#[from] std::io::Error),
+    #[error("Tonic error: {0}")]
+    Tonic(#[from] tonic::transport::Error),
+    #[error("Invalid address: {0}")]
+    InvalidAddress(#[from] http::uri::InvalidUri),
+    #[error("Rustls error: {0}")]
+    Rustls(#[from] rustls::Error),
+    #[error("Verifier error: {0}")]
+    Verifier(#[from] rustls::client::VerifierBuilderError),
 }

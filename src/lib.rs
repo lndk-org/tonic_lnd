@@ -8,7 +8,7 @@ mod error;
 mod protos;
 mod tls;
 pub use client::*;
-pub use error::ConnectError;
+pub use error::*;
 pub use protos::*;
 
 /// [`tonic::Status`] is re-exported as `Error` for convenience.

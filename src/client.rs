@@ -1,4 +1,4 @@
-use crate::error::{ConnectError, InternalConnectError};
+use crate::error::Result;
 use crate::protos::*;
 use crate::tls;
 use crate::Error;
@@ -158,7 +158,10 @@ pub struct MacaroonInterceptor {
 }
 
 impl tonic::service::Interceptor for MacaroonInterceptor {
-    fn call(&mut self, mut request: tonic::Request<()>) -> Result<tonic::Request<()>, Error> {
+    fn call(
+        &mut self,
+        mut request: tonic::Request<()>,
+    ) -> std::result::Result<tonic::Request<()>, Error> {
         request.metadata_mut().insert(
             "macaroon",
             tonic::metadata::MetadataValue::from_str(&self.macaroon)
@@ -168,14 +171,8 @@ impl tonic::service::Interceptor for MacaroonInterceptor {
     }
 }
 
-async fn load_macaroon(
-    path: impl AsRef<Path> + Into<PathBuf>,
-) -> Result<String, InternalConnectError> {
-    let macaroon =
-        tokio::fs::read(&path).await.map_err(|error| InternalConnectError::ReadFile {
-            file: path.into(),
-            error,
-        })?;
+async fn load_macaroon(path: impl AsRef<Path> + Into<PathBuf>) -> std::io::Result<String> {
+    let macaroon = tokio::fs::read(&path).await?;
     Ok(hex::encode(macaroon))
 }
 
@@ -190,11 +187,7 @@ async fn load_macaroon(
 ///
 /// If you have a motivating use case for use of direct data feel free to open an issue and
 /// explain.
-pub async fn connect<CP, MP>(
-    address: String,
-    cert_file: CP,
-    macaroon_file: MP,
-) -> Result<Client, ConnectError>
+pub async fn connect<CP, MP>(address: String, cert_file: CP, macaroon_file: MP) -> Result<Client>
 where
     CP: AsRef<Path> + Into<PathBuf> + std::fmt::Debug,
     MP: AsRef<Path> + Into<PathBuf> + std::fmt::Debug,
@@ -212,16 +205,12 @@ pub async fn connect_from_memory(
     address: String,
     cert_pem: String,
     macaroon: String,
-) -> Result<Client, ConnectError> {
+) -> Result<Client> {
     let tls_config = tls::config(tls::Cert::<String>::Bytes(cert_pem.into_bytes())).await?;
     do_connect(address, tls_config, macaroon).await
 }
 
-async fn do_connect(
-    address: String,
-    tls_config: ClientConfig,
-    macaroon: String,
-) -> Result<Client, ConnectError> {
+async fn do_connect(address: String, tls_config: ClientConfig, macaroon: String) -> Result<Client> {
     let connector = hyper_rustls::HttpsConnectorBuilder::new()
         .with_tls_config(tls_config)
         .https_or_http()
@@ -236,11 +225,7 @@ async fn do_connect(
             macaroon,
         },
     );
-    let uri =
-        Uri::from_str(address.as_str()).map_err(|error| InternalConnectError::InvalidAddress {
-            address,
-            error: Box::new(error),
-        })?;
+    let uri = Uri::from_str(address.as_str())?;
 
     let client = Client {
         #[cfg(feature = "lightningrpc")]
