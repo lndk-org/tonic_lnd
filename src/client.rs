@@ -210,12 +210,10 @@ async fn load_macaroon(
     path: impl AsRef<Path> + Into<PathBuf>,
 ) -> Result<String, InternalConnectError> {
     let macaroon =
-        tokio::fs::read(&path)
-            .await
-            .map_err(|error| InternalConnectError::ReadFile {
-                file: path.into(),
-                error,
-            })?;
+        tokio::fs::read(&path).await.map_err(|error| InternalConnectError::ReadFile {
+            file: path.into(),
+            error,
+        })?;
     Ok(hex::encode(macaroon))
 }
 
@@ -270,7 +268,12 @@ async fn do_connect(
 
     let hyper_client: HyperClient<_, TonicBody> =
         HyperClient::builder(TokioExecutor::new()).build(connector);
-    let svc = InterceptedService::new(hyper_client, MacaroonInterceptor { macaroon });
+    let svc = InterceptedService::new(
+        hyper_client,
+        MacaroonInterceptor {
+            macaroon,
+        },
+    );
     let uri =
         Uri::from_str(address.as_str()).map_err(|error| InternalConnectError::InvalidAddress {
             address,

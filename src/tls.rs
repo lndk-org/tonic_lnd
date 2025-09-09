@@ -57,7 +57,10 @@ impl HybridCertVerifier {
         let mut reader = &*contents;
         let cert_data: Vec<CertificateDer> = try_map_err!(
             rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>(),
-            |error| InternalConnectError::ParseCert { file: None, error }
+            |error| InternalConnectError::ParseCert {
+                file: None,
+                error
+            }
         );
 
         let mut root_store = RootCertStore::empty();
@@ -139,8 +142,7 @@ impl ServerCertVerifier for HybridCertVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
-        self.standard_verifier
-            .verify_tls12_signature(message, cert, dss)
+        self.standard_verifier.verify_tls12_signature(message, cert, dss)
     }
 
     fn verify_tls13_signature(
@@ -149,8 +151,7 @@ impl ServerCertVerifier for HybridCertVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TLSError> {
-        self.standard_verifier
-            .verify_tls13_signature(message, cert, dss)
+        self.standard_verifier.verify_tls13_signature(message, cert, dss)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {

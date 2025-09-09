@@ -13,7 +13,9 @@ pub struct ConnectError {
 
 impl From<InternalConnectError> for ConnectError {
     fn from(value: InternalConnectError) -> Self {
-        ConnectError { internal: value }
+        ConnectError {
+            internal: value,
+        }
     }
 }
 
@@ -38,12 +40,21 @@ impl fmt::Display for ConnectError {
         use InternalConnectError::*;
 
         match &self.internal {
-            ReadFile { file, .. } => write!(f, "failed to read file {}", file.display()),
-            ParseCert { file, .. } => match file {
+            ReadFile {
+                file,
+                ..
+            } => write!(f, "failed to read file {}", file.display()),
+            ParseCert {
+                file,
+                ..
+            } => match file {
                 Some(file) => write!(f, "failed to parse certificate {}", file.display()),
                 None => write!(f, "failed to parse certificate"),
             },
-            InvalidAddress { address, .. } => write!(f, "invalid address {address}"),
+            InvalidAddress {
+                address,
+                ..
+            } => write!(f, "invalid address {address}"),
         }
     }
 }
@@ -53,9 +64,18 @@ impl std::error::Error for ConnectError {
         use InternalConnectError::*;
 
         match &self.internal {
-            ReadFile { error, .. } => Some(error),
-            ParseCert { error, .. } => Some(error),
-            InvalidAddress { error, .. } => Some(&**error),
+            ReadFile {
+                error,
+                ..
+            } => Some(error),
+            ParseCert {
+                error,
+                ..
+            } => Some(error),
+            InvalidAddress {
+                error,
+                ..
+            } => Some(&**error),
         }
     }
 }
