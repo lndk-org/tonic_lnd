@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use tonic_prost_build::Config;
+
 fn main() -> std::io::Result<()> {
     println!("cargo:rerun-if-env-changed=LND_REPO_DIR");
     let dir = match std::env::var_os("LND_REPO_DIR") {
@@ -22,9 +24,13 @@ fn main() -> std::io::Result<()> {
 
     let proto_paths: Vec<_> = protos.iter().map(|proto| dir.join(proto)).collect();
 
-    tonic_prost_build::configure()
-        .build_client(true)
-        .build_server(false)
-        .compile_protos(&proto_paths, &[dir])?;
+    let mut conf = Config::default();
+    conf.protoc_arg("--experimental_allow_proto3_optional");
+
+    tonic_prost_build::configure().build_client(true).build_server(false).compile_with_config(
+        conf,
+        &proto_paths,
+        &[dir],
+    )?;
     Ok(())
 }
